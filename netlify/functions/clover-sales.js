@@ -42,7 +42,9 @@ exports.handler = async (event) => {
   orders.forEach(order => {
     const d = new Date(order.clientCreatedTime).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
     if (!dayMap[d]) dayMap[d] = { date: d, revenue: 0, orderCount: 0 };
-    dayMap[d].revenue += (order.total || 0) / 100;
+    // Net sales = total minus tax
+    const net = ((order.total || 0) - (order.taxAmount || 0)) / 100;
+    dayMap[d].revenue += net;
     dayMap[d].orderCount += 1;
   });
 

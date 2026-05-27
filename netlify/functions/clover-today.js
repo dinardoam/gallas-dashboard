@@ -43,7 +43,7 @@ exports.handler = async (event) => {
     offset += 1000;
   }
 
-  const revenue = orders.reduce((s, o) => s + (o.total || 0) / 100, 0);
+  const revenue = orders.reduce((s, o) => s + ((o.total || 0) - (o.taxAmount || 0)) / 100, 0);
   const orderCount = orders.length;
   const avgTicket = orderCount > 0 ? revenue / orderCount : 0;
 

@@ -59,7 +59,8 @@ exports.handler = async (event) => {
     const rawLabel = (order.orderType && order.orderType.label) ? order.orderType.label : null;
     const channel = normalizeChannel(rawLabel);
     if (!channelMap[channel]) channelMap[channel] = { name: channel, revenue: 0, orders: 0 };
-    channelMap[channel].revenue += (order.total || 0) / 100;
+    const net = ((order.total || 0) - (order.taxAmount || 0)) / 100;
+    channelMap[channel].revenue += net;
     channelMap[channel].orders += 1;
   });
 

@@ -52,7 +52,7 @@ exports.handler = async (event) => {
     );
     const h = easternHour % 24;
     if (!hourMap[h]) hourMap[h] = { hour: h, revenue: 0, orders: 0 };
-    hourMap[h].revenue += (order.total || 0) / 100;
+    hourMap[h].revenue += ((order.total || 0) - (order.taxAmount || 0)) / 100;
     hourMap[h].orders += 1;
   });
 
