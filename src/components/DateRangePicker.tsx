@@ -18,29 +18,31 @@ const PRESETS: { id: DateRange["preset"]; label: string }[] = [
 ];
 
 function getPresetRange(preset: DateRange["preset"]): { from: string; to: string } {
-  // Dashboard "today" is 2026-05-26
-  const today = new Date("2026-05-26");
-  const fmt = (d: Date) => d.toISOString().split("T")[0];
+  // Always use real current date in Eastern timezone
+  const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  const today = new Date(todayStr + "T12:00:00");
 
   if (preset === "today") {
-    return { from: fmt(today), to: fmt(today) };
+    return { from: todayStr, to: todayStr };
   }
   if (preset === "7d") {
     const from = new Date(today);
     from.setDate(from.getDate() - 6);
-    return { from: fmt(from), to: fmt(today) };
+    return { from: from.toISOString().split("T")[0], to: todayStr };
   }
   if (preset === "30d") {
     const from = new Date(today);
     from.setDate(from.getDate() - 29);
-    return { from: fmt(from), to: fmt(today) };
+    return { from: from.toISOString().split("T")[0], to: todayStr };
   }
   if (preset === "month") {
     const from = new Date(today.getFullYear(), today.getMonth(), 1);
-    return { from: fmt(from), to: fmt(today) };
+    return { from: from.toISOString().split("T")[0], to: todayStr };
   }
   // custom — return current week as default
-  return { from: "2026-05-20", to: "2026-05-26" };
+  const from = new Date(today);
+  from.setDate(from.getDate() - 6);
+  return { from: from.toISOString().split("T")[0], to: todayStr };
 }
 
 export function getDefaultDateRange(): DateRange {
