@@ -1,7 +1,13 @@
 // reviews.js — Netlify Function
-// Attempts Google Business Profile API; falls back to static data if unavailable.
-// Google OAuth tokens present do NOT include the business.manage scope,
-// so static fallback is always used unless credentials are added later.
+// Fetches live reviews from Google Business Profile API using OAuth refresh token.
+// Falls back to static data if credentials are missing or the API is unavailable.
+//
+// Required Netlify env vars for live mode:
+//   GOOGLE_CLIENT_ID         — OAuth2 client ID (maxbot project)
+//   GOOGLE_CLIENT_SECRET     — OAuth2 client secret
+//   GOOGLE_REFRESH_TOKEN     — Refresh token with business.manage scope
+//   GOOGLE_GBP_ACCOUNT_ID    — GBP account ID (e.g. "123456789012345678")
+//   GOOGLE_GBP_LOCATION_ID   — GBP location ID (e.g. "987654321098765432")
 
 const https = require('https');
 
@@ -106,42 +112,106 @@ const STATIC_TOTAL = 847;
 const STATIC_AVG = 4.6;
 
 // ---------------------------------------------------------------------------
-// Helper: attempt Google Business Profile API
-// Requires GOOGLE_GBP_ACCESS_TOKEN and GOOGLE_GBP_ACCOUNT_ID / GOOGLE_GBP_LOCATION_ID
+// Helper: fetch JSON via HTTPS
 // ---------------------------------------------------------------------------
-async function fetchGoogleReviews(limit) {
-  const token = process.env.GOOGLE_GBP_ACCESS_TOKEN;
-  const accountId = process.env.GOOGLE_GBP_ACCOUNT_ID;
-  const locationId = process.env.GOOGLE_GBP_LOCATION_ID;
-
-  if (!token || !accountId || !locationId) {
-    throw new Error('Google Business Profile credentials not configured');
-  }
-
-  const url = `https://mybusiness.googleapis.com/v4/accounts/${accountId}/locations/${locationId}/reviews?pageSize=${limit}`;
-
+function httpsGet(url, headers) {
   return new Promise((resolve, reject) => {
-    const req = https.get(url, {
-      headers: { Authorization: `Bearer ${token}` },
-    }, (res) => {
+    const req = https.get(url, { headers }, (res) => {
       let body = '';
       res.on('data', (d) => (body += d));
       res.on('end', () => {
         try {
           const parsed = JSON.parse(body);
-          if (res.statusCode !== 200) {
-            reject(new Error(`GBP API error ${res.statusCode}: ${JSON.stringify(parsed)}`));
+          if (res.statusCode >= 400) {
+            reject(new Error(`HTTP ${res.statusCode}: ${JSON.stringify(parsed)}`));
           } else {
             resolve(parsed);
           }
         } catch (e) {
-          reject(e);
+          reject(new Error(`JSON parse error: ${e.message}`));
         }
       });
     });
     req.on('error', reject);
-    req.setTimeout(8000, () => { req.destroy(); reject(new Error('GBP request timeout')); });
+    req.setTimeout(8000, () => { req.destroy(); reject(new Error('Request timeout')); });
   });
+}
+
+function httpsPost(hostname, path, body) {
+  return new Promise((resolve, reject) => {
+    const options = {
+      hostname,
+      path,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Length': Buffer.byteLength(body),
+      },
+    };
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', (d) => (data += d));
+      res.on('end', () => {
+        try {
+          resolve(JSON.parse(data));
+        } catch (e) {
+          reject(new Error(`JSON parse error: ${e.message}`));
+        }
+      });
+    });
+    req.on('error', reject);
+    req.setTimeout(8000, () => { req.destroy(); reject(new Error('Token request timeout')); });
+    req.write(body);
+    req.end();
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Get a fresh access token using the OAuth refresh token
+// ---------------------------------------------------------------------------
+async function getAccessToken() {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  const refreshToken = process.env.GOOGLE_REFRESH_TOKEN;
+
+  if (!clientId || !clientSecret || !refreshToken) {
+    throw new Error('Missing Google OAuth credentials (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN)');
+  }
+
+  const body = new URLSearchParams({
+    client_id: clientId,
+    client_secret: clientSecret,
+    refresh_token: refreshToken,
+    grant_type: 'refresh_token',
+  }).toString();
+
+  const data = await httpsPost('oauth2.googleapis.com', '/token', body);
+
+  if (!data.access_token) {
+    throw new Error(`Token refresh failed: ${JSON.stringify(data)}`);
+  }
+
+  return data.access_token;
+}
+
+// ---------------------------------------------------------------------------
+// Fetch Google Business Profile reviews
+// ---------------------------------------------------------------------------
+async function fetchGoogleReviews(limit) {
+  const accountId = process.env.GOOGLE_GBP_ACCOUNT_ID;
+  const locationId = process.env.GOOGLE_GBP_LOCATION_ID;
+
+  if (!accountId || !locationId) {
+    throw new Error('Missing GOOGLE_GBP_ACCOUNT_ID or GOOGLE_GBP_LOCATION_ID');
+  }
+
+  const accessToken = await getAccessToken();
+
+  // Use the v4 reviews endpoint (stable, widely supported)
+  const url = `https://mybusiness.googleapis.com/v4/accounts/${accountId}/locations/${locationId}/reviews?pageSize=${limit}`;
+
+  const data = await httpsGet(url, { Authorization: `Bearer ${accessToken}` });
+  return data;
 }
 
 function mapGbpReview(r, idx) {
@@ -183,18 +253,11 @@ exports.handler = async (event) => {
   const limit = Math.min(parseInt(params.limit || '10', 10), 50);
 
   // Try Google Business Profile API first
-  let source = 'static';
-  let recentReviews = STATIC_REVIEWS.slice(0, limit);
-
   try {
     const gbpData = await fetchGoogleReviews(limit);
     const reviews = (gbpData.reviews || []).map(mapGbpReview);
 
     if (reviews.length > 0) {
-      source = 'google';
-      recentReviews = reviews;
-
-      // Compute live stats from returned reviews
       const avgRating = reviews.reduce((s, r) => s + r.rating, 0) / reviews.length;
       const breakdown = { '5': 0, '4': 0, '3': 0, '2': 0, '1': 0 };
       reviews.forEach((r) => {
@@ -211,7 +274,7 @@ exports.handler = async (event) => {
           source: 'google',
           avgRating: parseFloat(avgRating.toFixed(1)),
           totalReviews: gbpData.totalReviewCount || totalFromBreakdown,
-          recentReviews,
+          recentReviews: reviews,
           ratingBreakdown: breakdown,
           trend: {
             last30days: parseFloat(avgRating.toFixed(1)),
@@ -233,7 +296,7 @@ exports.handler = async (event) => {
       source: 'static',
       avgRating: STATIC_AVG,
       totalReviews: STATIC_TOTAL,
-      recentReviews,
+      recentReviews: STATIC_REVIEWS.slice(0, limit),
       ratingBreakdown: STATIC_RATING_BREAKDOWN,
       trend: {
         last30days: 4.7,
