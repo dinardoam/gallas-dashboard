@@ -33,8 +33,8 @@ exports.handler = async (event) => {
 
   const mid = '3NMZM0YN49QQ1';
   const { startDate, endDate } = event.queryStringParameters || {};
-  const start = startDate ? new Date(startDate).getTime() : Date.now() - 7 * 86400000;
-  const end = endDate ? new Date(endDate).getTime() + 86400000 : Date.now();
+  const start = startDate ? new Date(`${startDate}T00:00:00-04:00`).getTime() : Date.now() - 7 * 86400000;
+  const end = endDate ? new Date(`${endDate}T00:00:00-04:00`).getTime() + 86400000 : Date.now();
 
   const allOrders = await fetchAllOrders(mid, apiKey, start, end);
   const orders = allOrders.filter(o => (o.total || 0) > 0);

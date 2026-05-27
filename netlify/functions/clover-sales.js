@@ -49,8 +49,8 @@ exports.handler = async (event) => {
   const { startDate, endDate } = event.queryStringParameters || {};
 
   // Use a slightly wider window to account for UTC/Eastern boundary, then filter by Eastern date
-  const start = startDate ? new Date(startDate).getTime() : Date.now() - 8 * 86400000;
-  const end = endDate ? new Date(endDate).getTime() + 86400000 : Date.now();
+  const start = startDate ? new Date(`${startDate}T00:00:00-04:00`).getTime() : Date.now() - 8 * 86400000;
+  const end = endDate ? new Date(`${endDate}T00:00:00-04:00`).getTime() + 86400000 : Date.now();
 
   const [orders, refunds] = await Promise.all([
     fetchAllOrders(mid, apiKey, start, end),

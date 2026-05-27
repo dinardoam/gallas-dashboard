@@ -19,8 +19,8 @@ exports.handler = async (event) => {
 
   const mid = '3NMZM0YN49QQ1';
   const { startDate, endDate } = event.queryStringParameters || {};
-  const start = startDate ? new Date(startDate).getTime() : Date.now() - 7 * 86400000;
-  const end = endDate ? new Date(endDate).getTime() + 86400000 : Date.now();
+  const start = startDate ? new Date(`${startDate}T00:00:00-04:00`).getTime() : Date.now() - 7 * 86400000;
+  const end = endDate ? new Date(`${endDate}T00:00:00-04:00`).getTime() + 86400000 : Date.now();
 
   // Fetch total revenue from orders + refunds in parallel
   const ordersUrl = `https://api.clover.com/v3/merchants/${mid}/orders?filter=clientCreatedTime>=${start}&filter=clientCreatedTime<${end}&limit=1000`;
