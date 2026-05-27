@@ -22,17 +22,22 @@ exports.handler = async (event) => {
   const start = startDate ? new Date(`${startDate}T00:00:00-04:00`).getTime() : Date.now() - 7 * 86400000;
   const end = endDate ? new Date(`${endDate}T00:00:00-04:00`).getTime() + 86400000 : Date.now();
 
-  // Fetch total revenue from orders + refunds in parallel
+  // Fetch total revenue from orders
   const ordersUrl = `https://api.clover.com/v3/merchants/${mid}/orders?filter=clientCreatedTime>=${start}&filter=clientCreatedTime<${end}&limit=1000`;
-  const refundsUrl = `https://api.clover.com/v3/merchants/${mid}/refunds?filter=clientCreatedTime>=${start}&filter=clientCreatedTime<${end}&limit=500`;
-
-  const [ordersData, refundsData] = await Promise.all([
-    fetchUrl(ordersUrl, apiKey),
-    fetchUrl(refundsUrl, apiKey),
-  ]);
-
+  const ordersData = await fetchUrl(ordersUrl, apiKey);
   const allOrders = ordersData.elements || [];
-  const refunds = refundsData.elements || [];
+
+  // Fetch all refunds with pagination
+  const refunds = [];
+  let refundOffset = 0;
+  while (true) {
+    const refundsUrl = `https://api.clover.com/v3/merchants/${mid}/refunds?filter=clientCreatedTime>=${start}&filter=clientCreatedTime<${end}&limit=500&offset=${refundOffset}`;
+    const refundsData = await fetchUrl(refundsUrl, apiKey);
+    const batch = refundsData.elements || [];
+    refunds.push(...batch);
+    if (batch.length < 500) break;
+    refundOffset += 500;
+  }
 
   const totalRevenue = allOrders.reduce((s, o) => s + (o.total || 0) / 100, 0);
   const voidTotal = refunds.reduce((s, r) => s + (r.amount || 0) / 100, 0);
@@ -49,7 +54,7 @@ exports.handler = async (event) => {
       return {
         date: isoDate,
         time,
-        amount: Math.round((r.amount || 0)) / 100,
+        amount: (r.amount || 0) / 100,
         orderTotal: orderTotal ? Math.round(orderTotal * 100) / 100 : null,
         reason: r.note || (r.orderRef && r.orderRef.note) || 'No reason provided',
       };

@@ -138,7 +138,7 @@ export default function Dashboard() {
                 <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></span>
                 Live
               </span>
-              <span>Week of May 20–26, 2026</span>
+              <span>{new Date(dateRange.from + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – {new Date(dateRange.to + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
             </div>
           </div>
         </div>

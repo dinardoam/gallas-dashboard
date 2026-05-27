@@ -2,7 +2,7 @@ const https = require('https');
 
 function fetchPage(mid, apiKey, start, end, offset) {
   return new Promise((resolve, reject) => {
-    const url = `https://api.clover.com/v3/merchants/${mid}/orders?filter=clientCreatedTime>=${start}&filter=clientCreatedTime<${end}&limit=1000&offset=${offset}&orderBy=clientCreatedTime+ASC&expand=orderType`;
+    const url = `https://api.clover.com/v3/merchants/${mid}/orders?filter=clientCreatedTime>=${start}&filter=clientCreatedTime<${end}&limit=1000&offset=${offset}&orderBy=clientCreatedTime+ASC&expand=orderType&expand=payments`;
     const req = https.get(url, { headers: { Authorization: `Bearer ${apiKey}` } }, (res) => {
       let body = '';
       res.on('data', d => body += d);
@@ -59,7 +59,10 @@ exports.handler = async (event) => {
     const rawLabel = (order.orderType && order.orderType.label) ? order.orderType.label : null;
     const channel = normalizeChannel(rawLabel);
     if (!channelMap[channel]) channelMap[channel] = { name: channel, revenue: 0, orders: 0 };
-    const net = ((order.total || 0) - (order.taxAmount || 0)) / 100;
+    const tax = (order.payments && order.payments.elements
+      ? order.payments.elements.reduce((t, p) => t + (p.taxAmount || 0), 0)
+      : 0);
+    const net = ((order.total || 0) - tax) / 100;
     channelMap[channel].revenue += net;
     channelMap[channel].orders += 1;
   });

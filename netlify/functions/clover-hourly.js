@@ -2,7 +2,7 @@ const https = require('https');
 
 function fetchPage(mid, apiKey, start, end, offset) {
   return new Promise((resolve, reject) => {
-    const url = `https://api.clover.com/v3/merchants/${mid}/orders?filter=clientCreatedTime>=${start}&filter=clientCreatedTime<${end}&limit=1000&offset=${offset}&orderBy=clientCreatedTime+ASC`;
+    const url = `https://api.clover.com/v3/merchants/${mid}/orders?filter=clientCreatedTime>=${start}&filter=clientCreatedTime<${end}&limit=1000&offset=${offset}&orderBy=clientCreatedTime+ASC&expand=payments`;
     const req = https.get(url, { headers: { Authorization: `Bearer ${apiKey}` } }, (res) => {
       let body = '';
       res.on('data', d => body += d);
@@ -52,7 +52,10 @@ exports.handler = async (event) => {
     );
     const h = easternHour % 24;
     if (!hourMap[h]) hourMap[h] = { hour: h, revenue: 0, orders: 0 };
-    hourMap[h].revenue += ((order.total || 0) - (order.taxAmount || 0)) / 100;
+    const tax = (order.payments && order.payments.elements
+      ? order.payments.elements.reduce((t, p) => t + (p.taxAmount || 0), 0)
+      : 0);
+    hourMap[h].revenue += ((order.total || 0) - tax) / 100;
     hourMap[h].orders += 1;
   });
 
