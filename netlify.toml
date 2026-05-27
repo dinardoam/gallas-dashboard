@@ -1,12 +1,12 @@
 [build]
   command = "npm run build"
-  publish = ".next"
+  publish = "out"
 
 [build.environment]
   NEXT_TELEMETRY_DISABLED = "1"
-
-[[plugins]]
-  package = "@netlify/plugin-nextjs"
+  NODE_VERSION = "20"
+  NETLIFY_NEXT_PLUGIN_SKIP = "true"
 
 [functions]
-  included_files = [".next/**"]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
