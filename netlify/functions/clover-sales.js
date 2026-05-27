@@ -17,7 +17,7 @@ async function fetchAllOrders(mid, apiKey, start, end) {
   const orders = [];
   let offset = 0;
   while (true) {
-    const url = `https://api.clover.com/v3/merchants/${mid}/orders?filter=clientCreatedTime>=${start}&filter=clientCreatedTime<${end}&limit=1000&offset=${offset}&orderBy=clientCreatedTime+ASC`;
+    const url = `https://api.clover.com/v3/merchants/${mid}/orders?filter=clientCreatedTime>=${start}&filter=clientCreatedTime<${end}&limit=1000&offset=${offset}&orderBy=clientCreatedTime+ASC&expand=payments`;
     const data = await fetchPage(url, apiKey);
     const batch = data.elements || [];
     orders.push(...batch);
@@ -47,30 +47,38 @@ exports.handler = async (event) => {
 
   const mid = '3NMZM0YN49QQ1';
   const { startDate, endDate } = event.queryStringParameters || {};
-  const start = startDate ? new Date(startDate).getTime() : Date.now() - 7 * 86400000;
+
+  // Use a slightly wider window to account for UTC/Eastern boundary, then filter by Eastern date
+  const start = startDate ? new Date(startDate).getTime() : Date.now() - 8 * 86400000;
   const end = endDate ? new Date(endDate).getTime() + 86400000 : Date.now();
 
-  // Fetch orders and refunds in parallel
   const [orders, refunds] = await Promise.all([
     fetchAllOrders(mid, apiKey, start, end),
     fetchAllRefunds(mid, apiKey, start, end),
   ]);
 
-  // Build day map from orders (gross - tax)
   const dayMap = {};
   orders.forEach(order => {
     const d = new Date(order.clientCreatedTime).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+    // Only include days within the requested range
+    if (startDate && d < startDate) return;
+    if (endDate && d > endDate) return;
     if (!dayMap[d]) dayMap[d] = { date: d, revenue: 0, orderCount: 0 };
-    dayMap[d].revenue += ((order.total || 0) - (order.taxAmount || 0)) / 100;
+    // Net = gross - tax (from payments)
+    const gross = (order.total || 0) / 100;
+    const tax = (order.payments && order.payments.elements
+      ? order.payments.elements.reduce((s, p) => s + (p.taxAmount || 0), 0)
+      : 0) / 100;
+    dayMap[d].revenue += gross - tax;
     dayMap[d].orderCount += 1;
   });
 
   // Subtract refunds per day
   refunds.forEach(refund => {
     const d = new Date(refund.clientCreatedTime || refund.createdTime).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
-    if (dayMap[d]) {
-      dayMap[d].revenue -= (refund.amount || 0) / 100;
-    }
+    if (startDate && d < startDate) return;
+    if (endDate && d > endDate) return;
+    if (dayMap[d]) dayMap[d].revenue -= (refund.amount || 0) / 100;
   });
 
   const days = Object.values(dayMap).sort((a, b) => a.date.localeCompare(b.date));
