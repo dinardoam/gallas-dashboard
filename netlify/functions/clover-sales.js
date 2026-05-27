@@ -1,8 +1,7 @@
 const https = require('https');
 
-function fetchPage(mid, apiKey, start, end, offset) {
+function fetchPage(url, apiKey) {
   return new Promise((resolve, reject) => {
-    const url = `https://api.clover.com/v3/merchants/${mid}/orders?filter=clientCreatedTime>=${start}&filter=clientCreatedTime<${end}&limit=1000&offset=${offset}&orderBy=clientCreatedTime+ASC`;
     const req = https.get(url, { headers: { Authorization: `Bearer ${apiKey}` } }, (res) => {
       let body = '';
       res.on('data', d => body += d);
@@ -18,13 +17,28 @@ async function fetchAllOrders(mid, apiKey, start, end) {
   const orders = [];
   let offset = 0;
   while (true) {
-    const data = await fetchPage(mid, apiKey, start, end, offset);
+    const url = `https://api.clover.com/v3/merchants/${mid}/orders?filter=clientCreatedTime>=${start}&filter=clientCreatedTime<${end}&limit=1000&offset=${offset}&orderBy=clientCreatedTime+ASC`;
+    const data = await fetchPage(url, apiKey);
     const batch = data.elements || [];
     orders.push(...batch);
     if (batch.length < 1000) break;
     offset += 1000;
   }
   return orders;
+}
+
+async function fetchAllRefunds(mid, apiKey, start, end) {
+  const refunds = [];
+  let offset = 0;
+  while (true) {
+    const url = `https://api.clover.com/v3/merchants/${mid}/refunds?filter=clientCreatedTime>=${start}&filter=clientCreatedTime<${end}&limit=1000&offset=${offset}&orderBy=clientCreatedTime+ASC`;
+    const data = await fetchPage(url, apiKey);
+    const batch = data.elements || [];
+    refunds.push(...batch);
+    if (batch.length < 1000) break;
+    offset += 1000;
+  }
+  return refunds;
 }
 
 exports.handler = async (event) => {
@@ -36,16 +50,27 @@ exports.handler = async (event) => {
   const start = startDate ? new Date(startDate).getTime() : Date.now() - 7 * 86400000;
   const end = endDate ? new Date(endDate).getTime() + 86400000 : Date.now();
 
-  const orders = await fetchAllOrders(mid, apiKey, start, end);
+  // Fetch orders and refunds in parallel
+  const [orders, refunds] = await Promise.all([
+    fetchAllOrders(mid, apiKey, start, end),
+    fetchAllRefunds(mid, apiKey, start, end),
+  ]);
 
+  // Build day map from orders (gross - tax)
   const dayMap = {};
   orders.forEach(order => {
     const d = new Date(order.clientCreatedTime).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
     if (!dayMap[d]) dayMap[d] = { date: d, revenue: 0, orderCount: 0 };
-    // Net sales = total minus tax
-    const net = ((order.total || 0) - (order.taxAmount || 0)) / 100;
-    dayMap[d].revenue += net;
+    dayMap[d].revenue += ((order.total || 0) - (order.taxAmount || 0)) / 100;
     dayMap[d].orderCount += 1;
+  });
+
+  // Subtract refunds per day
+  refunds.forEach(refund => {
+    const d = new Date(refund.clientCreatedTime || refund.createdTime).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+    if (dayMap[d]) {
+      dayMap[d].revenue -= (refund.amount || 0) / 100;
+    }
   });
 
   const days = Object.values(dayMap).sort((a, b) => a.date.localeCompare(b.date));
