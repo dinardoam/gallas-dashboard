@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   BarChart,
   Bar,
@@ -11,7 +12,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { PRODUCTION_FORECAST, SALES_DATA } from "@/lib/data";
-import { Pizza, AlertTriangle, CheckCircle, TrendingUp } from "lucide-react";
+import { Pizza, AlertTriangle, CheckCircle } from "lucide-react";
 import type { DateRange } from "./DateRangePicker";
 
 const CustomTooltip = ({ active, payload, label }: any) => {
@@ -93,26 +94,88 @@ function PrepCard({ label, value, unit, accent, note }: {
   );
 }
 
+interface LivePizzaDay {
+  date: string;
+  large: number;
+  mini: number;
+  gf: number;
+  total: number;
+}
+
 interface PizzaProductionProps {
   dateRange: DateRange;
 }
 
+function shortDateFromIso(iso: string) {
+  const [, m, d] = iso.split("-");
+  return `${parseInt(m)}/${parseInt(d)}`;
+}
+
 export default function PizzaProduction({ dateRange }: PizzaProductionProps) {
-  // Filter forecast data to show days within or near the selected range
-  // For future dates: show forecast overlapping with or after the range
+  const [liveActuals, setLiveActuals] = useState<LivePizzaDay[] | null>(null);
+  const [isLive, setIsLive] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setLiveActuals(null);
+    setIsLive(false);
+
+    fetch(`/.netlify/functions/clover-pizza?startDate=${dateRange.from}&endDate=${dateRange.to}`)
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then((json) => {
+        if (cancelled) return;
+        setLiveActuals(json.days || []);
+        setIsLive(true);
+      })
+      .catch(() => {
+        if (!cancelled) setIsLive(false);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [dateRange.from, dateRange.to]);
+
+  // Forecast
   const filteredForecast = PRODUCTION_FORECAST.filter(
     (d) => d.isoDate >= dateRange.from && d.isoDate <= dateRange.to
   );
-  // If no forecast data in range, show the upcoming forecast (next 7 days from range end)
   const forecastToShow = filteredForecast.length > 0 ? filteredForecast : PRODUCTION_FORECAST.slice(0, 7);
   const upcomingDay = PRODUCTION_FORECAST[0];
+  const showingUpcoming = filteredForecast.length === 0;
 
-  // Filter actual sales data for the selected range
-  const filteredActuals = SALES_DATA.filter(
+  // Actuals: prefer live data, fall back to SALES_DATA
+  const staticActuals = SALES_DATA.filter(
     (d) => d.isoDate >= dateRange.from && d.isoDate <= dateRange.to
   );
 
-  const showingUpcoming = filteredForecast.length === 0;
+  const actualsToShow: Array<{ date: string; shortDate: string; isoDate?: string; large: number; mini: number; gf: number; total?: number; pies?: number }> =
+    isLive && liveActuals
+      ? liveActuals.map((d) => ({
+          date: d.date,
+          shortDate: shortDateFromIso(d.date),
+          large: d.large,
+          mini: d.mini,
+          gf: d.gf,
+          total: d.total,
+        }))
+      : staticActuals.map((d) => ({
+          date: d.date,
+          shortDate: d.shortDate,
+          isoDate: d.isoDate,
+          large: d.large,
+          mini: d.mini,
+          gf: d.gf,
+          pies: d.pies,
+        }));
+
+  const hasActuals = actualsToShow.length > 0 && actualsToShow.some((d) => (d.total ?? d.pies ?? 0) > 0);
 
   return (
     <div className="space-y-6">
@@ -200,20 +263,40 @@ export default function PizzaProduction({ dateRange }: PizzaProductionProps) {
           <div>
             <h3 className="text-sm font-semibold text-white">Actual Production — Selected Range</h3>
             <p className="text-xs text-gray-500 mt-0.5">
-              {filteredActuals.length > 0
-                ? `${filteredActuals[0].date} – ${filteredActuals[filteredActuals.length - 1].date}`
+              {hasActuals
+                ? `${actualsToShow[0]?.date} – ${actualsToShow[actualsToShow.length - 1]?.date}`
                 : "No actuals in selected range"}
             </p>
           </div>
-          {filteredActuals.length > 0 && (
-            <div className="flex items-center gap-1 text-xs text-green-400 bg-green-500/10 px-2 py-1 rounded-full border border-green-500/20">
-              <CheckCircle className="w-3 h-3" />
-              Completed
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            {loading ? (
+              <span className="inline-flex items-center gap-1.5 text-xs text-gray-500">
+                <span className="w-2 h-2 rounded-full bg-gray-500 animate-pulse" />
+                Loading…
+              </span>
+            ) : isLive ? (
+              <span className="inline-flex items-center gap-1.5 text-xs text-green-400">
+                <span className="w-2 h-2 rounded-full bg-green-400" />
+                Live
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 text-xs text-gray-500">
+                <span className="w-2 h-2 rounded-full bg-gray-500" />
+                Static
+              </span>
+            )}
+            {hasActuals && (
+              <div className="flex items-center gap-1 text-xs text-green-400 bg-green-500/10 px-2 py-1 rounded-full border border-green-500/20">
+                <CheckCircle className="w-3 h-3" />
+                Completed
+              </div>
+            )}
+          </div>
         </div>
-        {filteredActuals.length === 0 ? (
-          <p className="text-sm text-gray-500 text-center py-6">No actual production data in selected range. Available: May 20–26, 2026.</p>
+        {!hasActuals ? (
+          <p className="text-sm text-gray-500 text-center py-6">
+            No actual production data in selected range. Available: May 20–26, 2026.
+          </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -227,10 +310,10 @@ export default function PizzaProduction({ dateRange }: PizzaProductionProps) {
                 </tr>
               </thead>
               <tbody>
-                {filteredActuals.map((d, i) => (
+                {actualsToShow.map((d, i) => (
                   <tr key={i} className="border-b border-gallas-dark-border/50 hover:bg-white/2 transition-colors">
                     <td className="py-2 pr-4 font-medium text-gray-300">{d.date}</td>
-                    <td className="py-2 px-4 text-right font-semibold text-white">{d.pies}</td>
+                    <td className="py-2 px-4 text-right font-semibold text-white">{d.total ?? d.pies ?? 0}</td>
                     <td className="py-2 px-4 text-right text-gray-400">{d.large}</td>
                     <td className="py-2 px-4 text-right text-gray-400">{d.mini}</td>
                     <td className="py-2 pl-4 text-right text-gray-400">{d.gf}</td>

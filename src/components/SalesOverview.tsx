@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   AreaChart,
   Area,
@@ -52,16 +53,89 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
-function filterByDateRange(range: DateRange) {
-  return SALES_DATA.filter((d) => d.isoDate >= range.from && d.isoDate <= range.to);
+interface DayData {
+  date: string;
+  shortDate: string;
+  isoDate: string;
+  revenue: number;
+  orderCount: number;
+  pies: number;
+  large: number;
+  mini: number;
+  gf: number;
+  note?: string;
 }
 
 interface SalesOverviewProps {
   dateRange: DateRange;
 }
 
+function buildStaticData(range: DateRange): DayData[] {
+  return SALES_DATA
+    .filter((d) => d.isoDate >= range.from && d.isoDate <= range.to)
+    .map((d) => ({
+      ...d,
+      orderCount: 0,
+      shortDate: d.shortDate,
+    }));
+}
+
+function shortDateFromIso(iso: string) {
+  const [, m, d] = iso.split("-");
+  return `${parseInt(m)}/${parseInt(d)}`;
+}
+
 export default function SalesOverview({ dateRange }: SalesOverviewProps) {
-  const filteredData = filterByDateRange(dateRange);
+  const [liveData, setLiveData] = useState<DayData[] | null>(null);
+  const [isLive, setIsLive] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setLiveData(null);
+    setIsLive(false);
+
+    fetch(`/.netlify/functions/clover-sales?startDate=${dateRange.from}&endDate=${dateRange.to}`)
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then((json) => {
+        if (cancelled) return;
+        // Merge live revenue/orderCount with static pie counts for the same dates
+        const staticMap = Object.fromEntries(
+          SALES_DATA.map((d) => [d.isoDate, d])
+        );
+        const merged: DayData[] = (json.days || []).map((ld: any) => {
+          const s = staticMap[ld.date];
+          return {
+            isoDate: ld.date,
+            shortDate: shortDateFromIso(ld.date),
+            date: s?.date ?? ld.date,
+            revenue: ld.revenue,
+            orderCount: ld.orderCount,
+            pies: s?.pies ?? 0,
+            large: s?.large ?? 0,
+            mini: s?.mini ?? 0,
+            gf: s?.gf ?? 0,
+            note: s?.note,
+          };
+        });
+        setLiveData(merged);
+        setIsLive(true);
+      })
+      .catch(() => {
+        if (!cancelled) setIsLive(false);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [dateRange.from, dateRange.to]);
+
+  const filteredData: DayData[] = liveData ?? buildStaticData(dateRange);
 
   const weekRevenue = filteredData.reduce((s, d) => s + d.revenue, 0);
   const avgDaily = filteredData.length > 0 ? Math.round(weekRevenue / filteredData.length) : 0;
@@ -75,17 +149,36 @@ export default function SalesOverview({ dateRange }: SalesOverviewProps) {
   const trendPct = priorWeekRevenue > 0 ? ((trend / priorWeekRevenue) * 100).toFixed(1) : "0.0";
   const isUp = trend >= 0;
 
-  // Comparison chart — only show prior week bars for days that overlap by index
   const comparisonData = filteredData.map((d, i) => ({
     shortDate: d.shortDate,
     "This Period": d.revenue,
-    "Prior Week": PRIOR_WEEK_SALES[SALES_DATA.indexOf(d)]?.revenue ?? 0,
+    "Prior Week": PRIOR_WEEK_SALES[SALES_DATA.indexOf(SALES_DATA.find((s) => s.isoDate === d.isoDate)!)]?.revenue ?? 0,
   }));
 
   const noData = filteredData.length === 0;
 
   return (
     <div className="space-y-6">
+      {/* Live/Static indicator */}
+      <div className="flex items-center justify-end gap-2">
+        {loading ? (
+          <span className="inline-flex items-center gap-1.5 text-xs text-gray-500">
+            <span className="w-2 h-2 rounded-full bg-gray-500 animate-pulse" />
+            Loading live data…
+          </span>
+        ) : isLive ? (
+          <span className="inline-flex items-center gap-1.5 text-xs text-green-400">
+            <span className="w-2 h-2 rounded-full bg-green-400" />
+            Live
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 text-xs text-gray-500">
+            <span className="w-2 h-2 rounded-full bg-gray-500" />
+            Static
+          </span>
+        )}
+      </div>
+
       {noData ? (
         <div className="bg-gallas-dark-card rounded-xl border border-gallas-dark-border p-12 text-center">
           <p className="text-gray-500 text-sm">No sales data available for the selected date range.</p>
@@ -204,6 +297,7 @@ export default function SalesOverview({ dateRange }: SalesOverviewProps) {
                   <tr className="border-b border-gallas-dark-border">
                     <th className="text-left py-2 pr-4 text-gray-500 font-medium">Day</th>
                     <th className="text-right py-2 px-4 text-gray-500 font-medium">Revenue</th>
+                    <th className="text-right py-2 px-4 text-gray-500 font-medium">Orders</th>
                     <th className="text-right py-2 px-4 text-gray-500 font-medium">Total Pies</th>
                     <th className="text-right py-2 px-4 text-gray-500 font-medium">Large</th>
                     <th className="text-right py-2 px-4 text-gray-500 font-medium">Mini</th>
@@ -219,6 +313,7 @@ export default function SalesOverview({ dateRange }: SalesOverviewProps) {
                     >
                       <td className="py-2.5 pr-4 font-medium text-white">{d.date}</td>
                       <td className="py-2.5 px-4 text-right font-semibold text-white">{formatCurrency(d.revenue)}</td>
+                      <td className="py-2.5 px-4 text-right text-gray-400">{isLive ? d.orderCount : "—"}</td>
                       <td className="py-2.5 px-4 text-right text-gray-300">{d.pies}</td>
                       <td className="py-2.5 px-4 text-right text-gray-400">{d.large}</td>
                       <td className="py-2.5 px-4 text-right text-gray-400">{d.mini}</td>
@@ -238,6 +333,9 @@ export default function SalesOverview({ dateRange }: SalesOverviewProps) {
                   <tr className="border-t-2 border-gallas-dark-border">
                     <td className="py-2.5 pr-4 font-bold text-white">Total</td>
                     <td className="py-2.5 px-4 text-right font-bold text-gallas-red-light">{formatCurrency(weekRevenue)}</td>
+                    <td className="py-2.5 px-4 text-right font-semibold text-gray-300">
+                      {isLive ? filteredData.reduce((s, d) => s + d.orderCount, 0) : "—"}
+                    </td>
                     <td className="py-2.5 px-4 text-right font-bold text-white">{totalPies}</td>
                     <td className="py-2.5 px-4 text-right font-semibold text-gray-300">{filteredData.reduce((s, d) => s + d.large, 0)}</td>
                     <td className="py-2.5 px-4 text-right font-semibold text-gray-300">{filteredData.reduce((s, d) => s + d.mini, 0)}</td>
