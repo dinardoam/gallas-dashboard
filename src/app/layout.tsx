@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import PasswordGate from "@/components/PasswordGate";
 
 export const metadata: Metadata = {
   title: "Galla's Pizza & Tavern — Operations Dashboard",
@@ -24,7 +25,9 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body className="bg-gallas-dark min-h-screen">{children}</body>
+      <body className="bg-gallas-dark min-h-screen">
+        <PasswordGate>{children}</PasswordGate>
+      </body>
     </html>
   );
 }

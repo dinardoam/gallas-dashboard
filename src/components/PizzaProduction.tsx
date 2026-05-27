@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   BarChart,
   Bar,
@@ -11,7 +12,8 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { PRODUCTION_FORECAST, SALES_DATA } from "@/lib/data";
-import { Pizza, AlertTriangle, CheckCircle, TrendingUp } from "lucide-react";
+import { Pizza, AlertTriangle, CheckCircle } from "lucide-react";
+import type { DateRange } from "./DateRangePicker";
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
@@ -36,11 +38,8 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
-// Get tomorrow's forecast (first item in forecast)
-const tomorrow = PRODUCTION_FORECAST[0];
-
 function PrepGuide({ day }: { day: typeof PRODUCTION_FORECAST[0] }) {
-  const doughBalls = Math.ceil(day.pies * 1.05); // 5% buffer
+  const doughBalls = Math.ceil(day.pies * 1.05);
   const largePercent = Math.round((day.large / day.pies) * 100);
   const miniPercent = Math.round((day.mini / day.pies) * 100);
   const gfPercent = Math.round((day.gf / day.pies) * 100);
@@ -95,22 +94,110 @@ function PrepCard({ label, value, unit, accent, note }: {
   );
 }
 
-export default function PizzaProduction() {
+interface LivePizzaDay {
+  date: string;
+  large: number;
+  mini: number;
+  gf: number;
+  total: number;
+}
+
+interface PizzaProductionProps {
+  dateRange: DateRange;
+}
+
+function shortDateFromIso(iso: string) {
+  const [, m, d] = iso.split("-");
+  return `${parseInt(m)}/${parseInt(d)}`;
+}
+
+export default function PizzaProduction({ dateRange }: PizzaProductionProps) {
+  const [liveActuals, setLiveActuals] = useState<LivePizzaDay[] | null>(null);
+  const [isLive, setIsLive] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setLiveActuals(null);
+    setIsLive(false);
+
+    fetch(`/.netlify/functions/clover-pizza?startDate=${dateRange.from}&endDate=${dateRange.to}`)
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then((json) => {
+        if (cancelled) return;
+        setLiveActuals(json.days || []);
+        setIsLive(true);
+      })
+      .catch(() => {
+        if (!cancelled) setIsLive(false);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [dateRange.from, dateRange.to]);
+
+  // Forecast
+  const filteredForecast = PRODUCTION_FORECAST.filter(
+    (d) => d.isoDate >= dateRange.from && d.isoDate <= dateRange.to
+  );
+  const forecastToShow = filteredForecast.length > 0 ? filteredForecast : PRODUCTION_FORECAST.slice(0, 7);
+  const upcomingDay = PRODUCTION_FORECAST[0];
+  const showingUpcoming = filteredForecast.length === 0;
+
+  // Actuals: prefer live data, fall back to SALES_DATA
+  const staticActuals = SALES_DATA.filter(
+    (d) => d.isoDate >= dateRange.from && d.isoDate <= dateRange.to
+  );
+
+  const actualsToShow: Array<{ date: string; shortDate: string; isoDate?: string; large: number; mini: number; gf: number; total?: number; pies?: number }> =
+    isLive && liveActuals
+      ? liveActuals.map((d) => ({
+          date: d.date,
+          shortDate: shortDateFromIso(d.date),
+          large: d.large,
+          mini: d.mini,
+          gf: d.gf,
+          total: d.total,
+        }))
+      : staticActuals.map((d) => ({
+          date: d.date,
+          shortDate: d.shortDate,
+          isoDate: d.isoDate,
+          large: d.large,
+          mini: d.mini,
+          gf: d.gf,
+          pies: d.pies,
+        }));
+
+  const hasActuals = actualsToShow.length > 0 && actualsToShow.some((d) => (d.total ?? d.pies ?? 0) > 0);
+
   return (
     <div className="space-y-6">
-      {/* Prep Guide for Tomorrow */}
+      {/* Prep Guide for Next Day */}
       <div className="bg-gallas-dark-card rounded-xl border border-gallas-dark-border p-5">
-        <PrepGuide day={tomorrow} />
+        <PrepGuide day={upcomingDay} />
       </div>
 
-      {/* Week Forecast Chart — Stacked Bar */}
+      {/* Production Forecast Chart */}
       <div className="bg-gallas-dark-card rounded-xl border border-gallas-dark-border p-5">
         <div className="mb-4">
-          <h3 className="text-sm font-semibold text-white">7-Day Production Forecast</h3>
-          <p className="text-xs text-gray-500 mt-0.5">May 27 – June 2 · Pies by size</p>
+          <h3 className="text-sm font-semibold text-white">
+            {showingUpcoming ? "Upcoming 7-Day Production Forecast" : "Production Forecast — Selected Range"}
+          </h3>
+          <p className="text-xs text-gray-500 mt-0.5">
+            {showingUpcoming
+              ? "May 27 – June 2 (no forecast data in selected range)"
+              : `${forecastToShow[0]?.date} – ${forecastToShow[forecastToShow.length - 1]?.date} · Pies by size`}
+          </p>
         </div>
         <ResponsiveContainer width="100%" height={280}>
-          <BarChart data={PRODUCTION_FORECAST} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+          <BarChart data={forecastToShow} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#2A2A2A" vertical={false} />
             <XAxis dataKey="shortDate" tick={{ fill: "#6B7280", fontSize: 12 }} axisLine={false} tickLine={false} />
             <YAxis tick={{ fill: "#6B7280", fontSize: 12 }} axisLine={false} tickLine={false} width={35} />
@@ -142,17 +229,17 @@ export default function PizzaProduction() {
               </tr>
             </thead>
             <tbody>
-              {PRODUCTION_FORECAST.map((d, i) => {
-                const isToday = i === 0;
+              {forecastToShow.map((d, i) => {
+                const isNext = i === 0 && showingUpcoming;
                 return (
                   <tr
                     key={i}
-                    className={`border-b border-gallas-dark-border/50 transition-colors ${isToday ? "bg-gallas-red/5" : "hover:bg-white/2"}`}
+                    className={`border-b border-gallas-dark-border/50 transition-colors ${isNext ? "bg-gallas-red/5" : "hover:bg-white/2"}`}
                   >
                     <td className="py-2.5 pr-4">
                       <div className="flex items-center gap-2">
-                        <span className={`font-medium ${isToday ? "text-gallas-red-light" : "text-white"}`}>{d.date}</span>
-                        {isToday && (
+                        <span className={`font-medium ${isNext ? "text-gallas-red-light" : "text-white"}`}>{d.date}</span>
+                        {isNext && (
                           <span className="text-xs bg-gallas-red text-white px-1.5 py-0.5 rounded font-medium">NEXT</span>
                         )}
                       </div>
@@ -170,42 +257,72 @@ export default function PizzaProduction() {
         </div>
       </div>
 
-      {/* Actual Last Week for Reference */}
+      {/* Actual Production for Selected Range */}
       <div className="bg-gallas-dark-card rounded-xl border border-gallas-dark-border p-5">
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-semibold text-white">Actual Production — Last 7 Days</h3>
-            <p className="text-xs text-gray-500 mt-0.5">May 20–26 · For comparison</p>
+            <h3 className="text-sm font-semibold text-white">Actual Production — Selected Range</h3>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {hasActuals
+                ? `${actualsToShow[0]?.date} – ${actualsToShow[actualsToShow.length - 1]?.date}`
+                : "No actuals in selected range"}
+            </p>
           </div>
-          <div className="flex items-center gap-1 text-xs text-green-400 bg-green-500/10 px-2 py-1 rounded-full border border-green-500/20">
-            <CheckCircle className="w-3 h-3" />
-            Completed
+          <div className="flex items-center gap-2">
+            {loading ? (
+              <span className="inline-flex items-center gap-1.5 text-xs text-gray-500">
+                <span className="w-2 h-2 rounded-full bg-gray-500 animate-pulse" />
+                Loading…
+              </span>
+            ) : isLive ? (
+              <span className="inline-flex items-center gap-1.5 text-xs text-green-400">
+                <span className="w-2 h-2 rounded-full bg-green-400" />
+                Live
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 text-xs text-gray-500">
+                <span className="w-2 h-2 rounded-full bg-gray-500" />
+                Static
+              </span>
+            )}
+            {hasActuals && (
+              <div className="flex items-center gap-1 text-xs text-green-400 bg-green-500/10 px-2 py-1 rounded-full border border-green-500/20">
+                <CheckCircle className="w-3 h-3" />
+                Completed
+              </div>
+            )}
           </div>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gallas-dark-border">
-                <th className="text-left py-2 pr-4 text-gray-500 font-medium">Day</th>
-                <th className="text-right py-2 px-4 text-gray-500 font-medium">Total</th>
-                <th className="text-right py-2 px-4 text-gray-500 font-medium">Large</th>
-                <th className="text-right py-2 px-4 text-gray-500 font-medium">Mini</th>
-                <th className="text-right py-2 pl-4 text-gray-500 font-medium">GF</th>
-              </tr>
-            </thead>
-            <tbody>
-              {SALES_DATA.map((d, i) => (
-                <tr key={i} className="border-b border-gallas-dark-border/50 hover:bg-white/2 transition-colors">
-                  <td className="py-2 pr-4 font-medium text-gray-300">{d.date}</td>
-                  <td className="py-2 px-4 text-right font-semibold text-white">{d.pies}</td>
-                  <td className="py-2 px-4 text-right text-gray-400">{d.large}</td>
-                  <td className="py-2 px-4 text-right text-gray-400">{d.mini}</td>
-                  <td className="py-2 pl-4 text-right text-gray-400">{d.gf}</td>
+        {!hasActuals ? (
+          <p className="text-sm text-gray-500 text-center py-6">
+            No actual production data in selected range. Available: May 20–26, 2026.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gallas-dark-border">
+                  <th className="text-left py-2 pr-4 text-gray-500 font-medium">Day</th>
+                  <th className="text-right py-2 px-4 text-gray-500 font-medium">Total</th>
+                  <th className="text-right py-2 px-4 text-gray-500 font-medium">Large</th>
+                  <th className="text-right py-2 px-4 text-gray-500 font-medium">Mini</th>
+                  <th className="text-right py-2 pl-4 text-gray-500 font-medium">GF</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {actualsToShow.map((d, i) => (
+                  <tr key={i} className="border-b border-gallas-dark-border/50 hover:bg-white/2 transition-colors">
+                    <td className="py-2 pr-4 font-medium text-gray-300">{d.date}</td>
+                    <td className="py-2 px-4 text-right font-semibold text-white">{d.total ?? d.pies ?? 0}</td>
+                    <td className="py-2 px-4 text-right text-gray-400">{d.large}</td>
+                    <td className="py-2 px-4 text-right text-gray-400">{d.mini}</td>
+                    <td className="py-2 pl-4 text-right text-gray-400">{d.gf}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

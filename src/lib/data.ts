@@ -4,13 +4,14 @@
 // ============================================================
 
 export const SALES_DATA = [
-  { date: "Tue 5/20", shortDate: "5/20", revenue: 8100, pies: 198, mini: 42, large: 152, gf: 3 },
-  { date: "Wed 5/21", shortDate: "5/21", revenue: 8300, pies: 204, mini: 38, large: 144, gf: 4 },
-  { date: "Thu 5/22", shortDate: "5/22", revenue: 14000, pies: 363, mini: 58, large: 277, gf: 6, note: "Portnoy spike" },
-  { date: "Fri 5/23", shortDate: "5/23", revenue: 11200, pies: 277, mini: 45, large: 210, gf: 5 },
-  { date: "Sat 5/24", shortDate: "5/24", revenue: 11400, pies: 287, mini: 48, large: 215, gf: 5 },
-  { date: "Sun 5/25", shortDate: "5/25", revenue: 3900, pies: 96, mini: 15, large: 72, gf: 2 },
-  { date: "Mon 5/26", shortDate: "5/26", revenue: 14600, pies: 292, mini: 65, large: 210, gf: 6 },
+  { date: "Tue 5/20", shortDate: "5/20", revenue: 8100, pies: 198, mini: 42, large: 152, gf: 3, isoDate: "2026-05-20" },
+  { date: "Wed 5/21", shortDate: "5/21", revenue: 8300, pies: 204, mini: 38, large: 144, gf: 4, isoDate: "2026-05-21" },
+  { date: "Thu 5/22", shortDate: "5/22", revenue: 14000, pies: 363, mini: 58, large: 277, gf: 6, note: "Portnoy spike", isoDate: "2026-05-22" },
+  { date: "Fri 5/23", shortDate: "5/23", revenue: 11200, pies: 277, mini: 45, large: 210, gf: 5, isoDate: "2026-05-23" },
+  { date: "Sat 5/24", shortDate: "5/24", revenue: 11400, pies: 287, mini: 48, large: 215, gf: 5, isoDate: "2026-05-24" },
+  { date: "Sun 5/25", shortDate: "5/25", revenue: 3900, pies: 96, mini: 15, large: 72, gf: 2, isoDate: "2026-05-25" },
+  { date: "Mon 5/26", shortDate: "5/26", revenue: 12439, pies: 292, mini: 65, large: 210, gf: 6, isoDate: "2026-05-26" },
+  { date: "Tue 5/27", shortDate: "5/27", revenue: 0, pies: 0, mini: 0, large: 0, gf: 0, isoDate: "2026-05-27" },
 ];
 
 export const PRIOR_WEEK_SALES = [
@@ -24,13 +25,13 @@ export const PRIOR_WEEK_SALES = [
 ];
 
 export const PRODUCTION_FORECAST = [
-  { date: "Tue 5/27", shortDate: "5/27", pies: 270, mini: 55, large: 207, gf: 8 },
-  { date: "Wed 5/28", shortDate: "5/28", pies: 280, mini: 57, large: 215, gf: 8 },
-  { date: "Thu 5/29", shortDate: "5/29", pies: 370, mini: 74, large: 283, gf: 13 },
-  { date: "Fri 5/30", shortDate: "5/30", pies: 413, mini: 82, large: 316, gf: 15 },
-  { date: "Sat 5/31", shortDate: "5/31", pies: 380, mini: 76, large: 291, gf: 13 },
-  { date: "Sun 6/1", shortDate: "6/1", pies: 120, mini: 24, large: 92, gf: 4 },
-  { date: "Mon 6/2", shortDate: "6/2", pies: 300, mini: 60, large: 230, gf: 10 },
+  { date: "Tue 5/27", shortDate: "5/27", pies: 270, mini: 55, large: 207, gf: 8, isoDate: "2026-05-27" },
+  { date: "Wed 5/28", shortDate: "5/28", pies: 280, mini: 57, large: 215, gf: 8, isoDate: "2026-05-28" },
+  { date: "Thu 5/29", shortDate: "5/29", pies: 370, mini: 74, large: 283, gf: 13, isoDate: "2026-05-29" },
+  { date: "Fri 5/30", shortDate: "5/30", pies: 413, mini: 82, large: 316, gf: 15, isoDate: "2026-05-30" },
+  { date: "Sat 5/31", shortDate: "5/31", pies: 380, mini: 76, large: 291, gf: 13, isoDate: "2026-05-31" },
+  { date: "Sun 6/1", shortDate: "6/1", pies: 120, mini: 24, large: 92, gf: 4, isoDate: "2026-06-01" },
+  { date: "Mon 6/2", shortDate: "6/2", pies: 300, mini: 60, large: 230, gf: 10, isoDate: "2026-06-02" },
 ];
 
 export const POPMENU_DATA = {
@@ -48,6 +49,100 @@ export const POPMENU_DATA = {
     { date: "5/26", orders: 38, revenue: 2274 },
   ],
 };
+
+// Upcoming orders — placeholder data (Popmenu API integration coming)
+// "scheduledFor" is ISO datetime; "firesAt" is when KDS fires (45min before due)
+// TODAY = 2026-05-26. Orders span next 24 hours.
+export const UPCOMING_ORDERS = [
+  {
+    id: "POP-10041",
+    customer: "Rick Torrance",
+    type: "pickup",
+    scheduledFor: "2026-05-26T18:30:00",
+    items: "2× Large Pepperoni, 1× Large Margherita",
+    pies: 3,
+    total: 89.97,
+    phone: "614-555-0182",
+    notes: "",
+  },
+  {
+    id: "POP-10042",
+    customer: "Eastside Corporate",
+    type: "delivery",
+    scheduledFor: "2026-05-26T19:00:00",
+    items: "4× Large Sausage & Peppers, 2× Large Supreme, 1× GF Margherita",
+    pies: 7,
+    total: 223.93,
+    phone: "614-555-0291",
+    notes: "Ring bell — suite 200. Large corporate order.",
+  },
+  {
+    id: "POP-10043",
+    customer: "Laura Kim",
+    type: "pickup",
+    scheduledFor: "2026-05-26T19:45:00",
+    items: "1× Large Mushroom, 1× Mini Cheese",
+    pies: 2,
+    total: 54.98,
+    phone: "614-555-0344",
+    notes: "",
+  },
+  {
+    id: "POP-10044",
+    customer: "Brendan Walsh",
+    type: "pickup",
+    scheduledFor: "2026-05-26T20:15:00",
+    items: "3× Large Pepperoni, 1× Large Sausage, 1× Mini GF",
+    pies: 5,
+    total: 162.45,
+    phone: "614-555-0412",
+    notes: "Birthday party — please include plates.",
+  },
+  {
+    id: "POP-10045",
+    customer: "Gahanna Soccer Club",
+    type: "pickup",
+    scheduledFor: "2026-05-26T21:00:00",
+    items: "6× Large Cheese, 3× Large Pepperoni, 2× Mini Cheese",
+    pies: 11,
+    total: 341.78,
+    phone: "614-555-0523",
+    notes: "Team celebration. Needs to be ready all at once.",
+  },
+  {
+    id: "POP-10046",
+    customer: "Priya Patel",
+    type: "delivery",
+    scheduledFor: "2026-05-26T21:30:00",
+    items: "1× Large Veggie, 1× GF Margherita",
+    pies: 2,
+    total: 67.98,
+    phone: "614-555-0614",
+    notes: "GF allergy — keep separate.",
+  },
+  {
+    id: "POP-10047",
+    customer: "Dave & Crew",
+    type: "pickup",
+    scheduledFor: "2026-05-26T22:00:00",
+    items: "2× Large Supreme, 2× Large Pepperoni",
+    pies: 4,
+    total: 129.96,
+    phone: "614-555-0711",
+    notes: "",
+  },
+  {
+    id: "POP-10048",
+    customer: "Night Owl Delivery",
+    type: "delivery",
+    scheduledFor: "2026-05-27T10:00:00",
+    items: "5× Large Sausage, 2× Large Margherita, 1× Mini Cheese",
+    pies: 8,
+    total: 254.87,
+    phone: "614-555-0833",
+    notes: "Lunch prep order — next morning.",
+  },
+];
 
 export const REVIEWS_DATA = [
   {
