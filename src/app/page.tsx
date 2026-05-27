@@ -6,7 +6,9 @@ import PizzaProduction from "@/components/PizzaProduction";
 import OnlineOrders from "@/components/OnlineOrders";
 import ReviewsSection from "@/components/ReviewsSection";
 import CateringPipeline from "@/components/CateringPipeline";
-import { SUMMARY_STATS } from "@/lib/data";
+import DateRangePicker, { getDefaultDateRange } from "@/components/DateRangePicker";
+import type { DateRange } from "@/components/DateRangePicker";
+import { SALES_DATA, SUMMARY_STATS } from "@/lib/data";
 import { TrendingUp, TrendingDown, Pizza, DollarSign, BarChart3, ShoppingBag, Star, Utensils } from "lucide-react";
 
 const tabs = [
@@ -17,6 +19,9 @@ const tabs = [
   { id: "catering", label: "Catering", icon: Utensils },
 ];
 
+// Tabs that use date range filtering
+const DATE_FILTERED_TABS = new Set(["sales", "production"]);
+
 function formatCurrency(n: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
 }
@@ -26,9 +31,32 @@ function formatPercent(a: number, b: number) {
   return { value: Math.abs(pct).toFixed(1), up: pct >= 0 };
 }
 
+function computeKpis(dateRange: DateRange) {
+  const filtered = SALES_DATA.filter((d) => d.isoDate >= dateRange.from && d.isoDate <= dateRange.to);
+  if (filtered.length === 0) {
+    return {
+      weekRevenue: 0,
+      avgDaily: 0,
+      totalPies: 0,
+      peakDay: null,
+    };
+  }
+  const weekRevenue = filtered.reduce((s, d) => s + d.revenue, 0);
+  return {
+    weekRevenue,
+    avgDaily: Math.round(weekRevenue / filtered.length),
+    totalPies: filtered.reduce((s, d) => s + d.pies, 0),
+    peakDay: filtered.reduce((max, d) => d.revenue > max.revenue ? d : max, filtered[0]),
+  };
+}
+
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("sales");
-  const trend = formatPercent(SUMMARY_STATS.weekRevenue, SUMMARY_STATS.priorWeekRevenue);
+  const [dateRange, setDateRange] = useState<DateRange>(getDefaultDateRange());
+
+  const kpis = computeKpis(dateRange);
+  const trend = formatPercent(kpis.weekRevenue, SUMMARY_STATS.priorWeekRevenue);
+  const showDatePicker = DATE_FILTERED_TABS.has(activeTab);
 
   return (
     <div className="min-h-screen bg-gallas-dark text-white">
@@ -61,8 +89,8 @@ export default function Dashboard() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <KpiCard
-              label="Week Revenue"
-              value={formatCurrency(SUMMARY_STATS.weekRevenue)}
+              label={showDatePicker ? "Period Revenue" : "Week Revenue"}
+              value={formatCurrency(kpis.weekRevenue)}
               sub={
                 <span className={`flex items-center gap-1 text-xs font-medium ${trend.up ? "text-green-400" : "text-red-400"}`}>
                   {trend.up ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
@@ -74,22 +102,31 @@ export default function Dashboard() {
             />
             <KpiCard
               label="Avg Daily Revenue"
-              value={formatCurrency(SUMMARY_STATS.avgDaily)}
-              sub={<span className="text-xs text-gray-500">7-day average</span>}
+              value={formatCurrency(kpis.avgDaily)}
+              sub={<span className="text-xs text-gray-500">{showDatePicker ? "filtered avg" : "7-day average"}</span>}
               icon={<BarChart3 className="w-4 h-4" />}
               accent="gold"
             />
             <KpiCard
               label="Total Pies Sold"
-              value={SUMMARY_STATS.totalPies.toLocaleString()}
-              sub={<span className="text-xs text-gray-500">This week</span>}
+              value={kpis.totalPies.toLocaleString()}
+              sub={<span className="text-xs text-gray-500">{showDatePicker ? "filtered range" : "This week"}</span>}
               icon={<Pizza className="w-4 h-4" />}
               accent="red"
             />
             <KpiCard
               label="Peak Day"
-              value={formatCurrency(SUMMARY_STATS.peakDay.revenue)}
-              sub={<span className="text-xs text-gray-500">{SUMMARY_STATS.peakDay.date} (Portnoy spike)</span>}
+              value={kpis.peakDay ? formatCurrency(kpis.peakDay.revenue) : "—"}
+              sub={
+                kpis.peakDay ? (
+                  <span className="text-xs text-gray-500">
+                    {kpis.peakDay.date}
+                    {kpis.peakDay.note ? ` (${kpis.peakDay.note})` : ""}
+                  </span>
+                ) : (
+                  <span className="text-xs text-gray-500">No data in range</span>
+                )
+              }
               icon={<TrendingUp className="w-4 h-4" />}
               accent="gold"
             />
@@ -127,8 +164,15 @@ export default function Dashboard() {
 
       {/* Tab Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {activeTab === "sales" && <SalesOverview />}
-        {activeTab === "production" && <PizzaProduction />}
+        {/* Date Range Picker — shown only for filterable tabs */}
+        {showDatePicker && (
+          <div className="mb-6">
+            <DateRangePicker value={dateRange} onChange={setDateRange} />
+          </div>
+        )}
+
+        {activeTab === "sales" && <SalesOverview dateRange={dateRange} />}
+        {activeTab === "production" && <PizzaProduction dateRange={dateRange} />}
         {activeTab === "online" && <OnlineOrders />}
         {activeTab === "reviews" && <ReviewsSection />}
         {activeTab === "catering" && <CateringPipeline />}

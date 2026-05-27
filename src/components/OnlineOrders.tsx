@@ -13,6 +13,7 @@ import {
 } from "recharts";
 import { POPMENU_DATA } from "@/lib/data";
 import { ShoppingBag, Users, DollarSign, TrendingUp } from "lucide-react";
+import UpcomingOrders from "./UpcomingOrders";
 
 function formatCurrency(n: number) {
   return new Intl.NumberFormat("en-US", {
@@ -45,6 +46,18 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 export default function OnlineOrders() {
   return (
     <div className="space-y-6">
+      {/* UPCOMING ORDERS — most critical operational view */}
+      <div className="bg-gallas-dark-card rounded-xl border-2 border-gallas-red/40 p-5 shadow-lg shadow-gallas-red/5">
+        <UpcomingOrders />
+      </div>
+
+      {/* Divider */}
+      <div className="flex items-center gap-3">
+        <div className="flex-1 h-px bg-gallas-dark-border" />
+        <span className="text-xs text-gray-600 font-medium uppercase tracking-wide">Historical Channel Data</span>
+        <div className="flex-1 h-px bg-gallas-dark-border" />
+      </div>
+
       {/* KPIs */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <MetricCard

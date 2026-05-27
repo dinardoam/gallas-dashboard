@@ -1,7 +1,7 @@
 "use client";
 
 import { REVIEWS_DATA } from "@/lib/data";
-import { Star, ThumbsUp, MessageSquare, TrendingUp } from "lucide-react";
+import { Star, ThumbsUp, MessageSquare, TrendingUp, Plug } from "lucide-react";
 
 function StarRating({ rating }: { rating: number }) {
   return (
@@ -40,6 +40,17 @@ export default function ReviewsSection() {
 
   return (
     <div className="space-y-6">
+      {/* Coming soon banner */}
+      <div className="flex items-start gap-3 bg-blue-500/5 border border-blue-500/20 rounded-xl p-4">
+        <Plug className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
+        <div>
+          <p className="text-sm font-semibold text-blue-300">Connecting to Google, Popmenu, and One Bite — coming soon</p>
+          <p className="text-xs text-gray-400 mt-1">
+            Live review aggregation across all platforms is in progress. For now, showing curated recent reviews pulled manually.
+          </p>
+        </div>
+      </div>
+
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-gallas-dark-card rounded-xl border border-gallas-dark-border p-4">
