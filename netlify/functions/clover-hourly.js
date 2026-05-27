@@ -1,5 +1,32 @@
 const https = require('https');
 
+function fetchPage(mid, apiKey, start, end, offset) {
+  return new Promise((resolve, reject) => {
+    const url = `https://api.clover.com/v3/merchants/${mid}/orders?filter=clientCreatedTime>=${start}&filter=clientCreatedTime<${end}&limit=1000&offset=${offset}&orderBy=clientCreatedTime+ASC`;
+    const req = https.get(url, { headers: { Authorization: `Bearer ${apiKey}` } }, (res) => {
+      let body = '';
+      res.on('data', d => body += d);
+      res.on('end', () => {
+        try { resolve(JSON.parse(body)); } catch (e) { reject(e); }
+      });
+    });
+    req.on('error', reject);
+  });
+}
+
+async function fetchAllOrders(mid, apiKey, start, end) {
+  const orders = [];
+  let offset = 0;
+  while (true) {
+    const data = await fetchPage(mid, apiKey, start, end, offset);
+    const batch = data.elements || [];
+    orders.push(...batch);
+    if (batch.length < 1000) break;
+    offset += 1000;
+  }
+  return orders;
+}
+
 exports.handler = async (event) => {
   const apiKey = process.env.CLOVER_GALLAS_API_KEY;
   if (!apiKey) return { statusCode: 500, body: JSON.stringify({ error: 'API key not configured' }) };
@@ -9,35 +36,13 @@ exports.handler = async (event) => {
   const start = startDate ? new Date(startDate).getTime() : Date.now() - 7 * 86400000;
   const end = endDate ? new Date(endDate).getTime() + 86400000 : Date.now();
 
-  const url = `https://api.clover.com/v3/merchants/${mid}/orders?filter=clientCreatedTime>=${start}&filter=clientCreatedTime<${end}&limit=1000`;
-
-  let data;
-  try {
-    data = await new Promise((resolve, reject) => {
-      const req = https.get(url, { headers: { Authorization: `Bearer ${apiKey}` } }, (res) => {
-        let body = '';
-        res.on('data', d => body += d);
-        res.on('end', () => {
-          try { resolve(JSON.parse(body)); } catch (e) { reject(e); }
-        });
-      });
-      req.on('error', reject);
-    });
-  } catch (err) {
-    return { statusCode: 500, body: JSON.stringify({ error: 'Failed to fetch Clover data' }) };
-  }
-
-  const orders = (data.elements || []).filter(o =>
-    (o.total || 0) > 0 &&
-    o.state !== 'open' &&
-    o.paymentState !== 'OPEN'
-  );
+  const allOrders = await fetchAllOrders(mid, apiKey, start, end);
+  const orders = allOrders.filter(o => (o.total || 0) > 0);
 
   // Group by hour in Eastern time
   const hourMap = {};
   orders.forEach(order => {
     const d = new Date(order.clientCreatedTime);
-    // Get hour in Eastern time
     const easternHour = parseInt(
       new Intl.DateTimeFormat('en-US', {
         timeZone: 'America/New_York',
@@ -45,7 +50,7 @@ exports.handler = async (event) => {
         hour12: false,
       }).format(d)
     );
-    const h = easternHour % 24; // handle 24 -> 0
+    const h = easternHour % 24;
     if (!hourMap[h]) hourMap[h] = { hour: h, revenue: 0, orders: 0 };
     hourMap[h].revenue += (order.total || 0) / 100;
     hourMap[h].orders += 1;

@@ -1,17 +1,8 @@
 const https = require('https');
 
-exports.handler = async (event) => {
-  const apiKey = process.env.CLOVER_GALLAS_API_KEY;
-  if (!apiKey) return { statusCode: 500, body: JSON.stringify({ error: 'API key not configured' }) };
-
-  const mid = '3NMZM0YN49QQ1';
-  const { startDate, endDate } = event.queryStringParameters || {};
-  const start = startDate ? new Date(startDate).getTime() : Date.now() - 7 * 86400000;
-  const end = endDate ? new Date(endDate).getTime() + 86400000 : Date.now();
-
-  const url = `https://api.clover.com/v3/merchants/${mid}/orders?filter=clientCreatedTime>=${start}&filter=clientCreatedTime<${end}&limit=1000&expand=orderType`;
-
-  const data = await new Promise((resolve, reject) => {
+function fetchPage(mid, apiKey, start, end, offset) {
+  return new Promise((resolve, reject) => {
+    const url = `https://api.clover.com/v3/merchants/${mid}/orders?filter=clientCreatedTime>=${start}&filter=clientCreatedTime<${end}&limit=1000&offset=${offset}&orderBy=clientCreatedTime+ASC&expand=orderType`;
     const req = https.get(url, { headers: { Authorization: `Bearer ${apiKey}` } }, (res) => {
       let body = '';
       res.on('data', d => body += d);
@@ -21,27 +12,48 @@ exports.handler = async (event) => {
     });
     req.on('error', reject);
   });
+}
 
-  const orders = data.elements || [];
-
-  // Normalize Clover order type labels into clean channel names
-  function normalizeChannel(label) {
-    if (!label) return 'Other';
-    const l = label.toLowerCase();
-    if (l.includes('doordash') || l.includes('door dash')) return 'DoorDash';
-    if (l.includes('uber')) return 'Uber Eats';
-    if (l.includes('popmenu') && l.includes('delivery')) return 'Popmenu Delivery';
-    if (l.includes('popmenu') && l.includes('pickup')) return 'Popmenu Pickup';
-    if (l.includes('popmenu')) return 'Popmenu';
-    if (l.includes('online')) return 'Online Order';
-    if (l.includes('delivery')) return 'Delivery';
-    if (l.includes('to go') || l.includes('togo') || l.includes('take out') || l.includes('takeout') || l.includes('pickup') || l.includes('pick up')) return 'To Go';
-    if (l.includes('dine in') || l.includes('dine-in') || l.includes('dinein')) return 'Dine In';
-    if (l.includes('bar')) return 'Bar';
-    return label; // keep original label if no match
+async function fetchAllOrders(mid, apiKey, start, end) {
+  const orders = [];
+  let offset = 0;
+  while (true) {
+    const data = await fetchPage(mid, apiKey, start, end, offset);
+    const batch = data.elements || [];
+    orders.push(...batch);
+    if (batch.length < 1000) break;
+    offset += 1000;
   }
+  return orders;
+}
 
-  // Group by normalized channel
+function normalizeChannel(label) {
+  if (!label) return 'Other';
+  const l = label.toLowerCase();
+  if (l.includes('doordash') || l.includes('door dash')) return 'DoorDash';
+  if (l.includes('uber')) return 'Uber Eats';
+  if (l.includes('popmenu') && l.includes('delivery')) return 'Popmenu Delivery';
+  if (l.includes('popmenu') && l.includes('pickup')) return 'Popmenu Pickup';
+  if (l.includes('popmenu')) return 'Popmenu';
+  if (l.includes('online')) return 'Online Order';
+  if (l.includes('delivery')) return 'Delivery';
+  if (l.includes('to go') || l.includes('togo') || l.includes('take out') || l.includes('takeout') || l.includes('pickup') || l.includes('pick up')) return 'To Go';
+  if (l.includes('dine in') || l.includes('dine-in') || l.includes('dinein')) return 'Dine In';
+  if (l.includes('bar')) return 'Bar';
+  return label;
+}
+
+exports.handler = async (event) => {
+  const apiKey = process.env.CLOVER_GALLAS_API_KEY;
+  if (!apiKey) return { statusCode: 500, body: JSON.stringify({ error: 'API key not configured' }) };
+
+  const mid = '3NMZM0YN49QQ1';
+  const { startDate, endDate } = event.queryStringParameters || {};
+  const start = startDate ? new Date(startDate).getTime() : Date.now() - 7 * 86400000;
+  const end = endDate ? new Date(endDate).getTime() + 86400000 : Date.now();
+
+  const orders = await fetchAllOrders(mid, apiKey, start, end);
+
   const channelMap = {};
   orders.forEach(order => {
     const rawLabel = (order.orderType && order.orderType.label) ? order.orderType.label : null;
@@ -53,7 +65,6 @@ exports.handler = async (event) => {
 
   const total = Object.values(channelMap).reduce((s, c) => s + c.revenue, 0);
 
-  // Sort by revenue descending
   const channels = Object.values(channelMap)
     .sort((a, b) => b.revenue - a.revenue)
     .map(c => ({
