@@ -1,9 +1,10 @@
 const https = require('https');
 
 exports.handler = async (event) => {
-  const apiKey = process.env.CLOVER_GALLAS_API_KEY || '3d8c1771-38b6-d9b4-c195-692f1b32d071';
+  const apiKey = process.env.CLOVER_GALLAS_API_KEY;
+  if (!apiKey) return { statusCode: 500, body: JSON.stringify({ error: 'API key not configured' }) };
+
   const mid = '3NMZM0YN49QQ1';
-  
   const { startDate, endDate } = event.queryStringParameters || {};
   const start = startDate ? new Date(startDate).getTime() : Date.now() - 7 * 86400000;
   const end = endDate ? new Date(endDate).getTime() + 86400000 : Date.now();
@@ -21,7 +22,6 @@ exports.handler = async (event) => {
 
   const orders = data.elements || [];
   const dayMap = {};
-
   orders.forEach(order => {
     const d = new Date(order.clientCreatedTime).toISOString().slice(0, 10);
     if (!dayMap[d]) dayMap[d] = { date: d, large: 0, mini: 0, gf: 0, total: 0 };
