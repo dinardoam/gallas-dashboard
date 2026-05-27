@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import SalesOverview from "@/components/SalesOverview";
 import PizzaProduction from "@/components/PizzaProduction";
 import OnlineOrders from "@/components/OnlineOrders";
-import ReviewsSection from "@/components/ReviewsSection";
+import ReviewsLive from "@/components/ReviewsLive";
 import CateringPipeline from "@/components/CateringPipeline";
 import DateRangePicker, { getDefaultDateRange } from "@/components/DateRangePicker";
 import type { DateRange } from "@/components/DateRangePicker";
@@ -246,7 +246,7 @@ export default function Dashboard() {
         )}
         {activeTab === "production" && <PizzaProduction dateRange={dateRange} />}
         {activeTab === "online" && <OnlineOrders />}
-        {activeTab === "reviews" && <ReviewsSection />}
+        {activeTab === "reviews" && <ReviewsLive />}
         {activeTab === "catering" && <CateringPipeline />}
         {activeTab === "analytics" && (
           <div className="space-y-8">
