@@ -10,8 +10,11 @@ import DateRangePicker, { getDefaultDateRange } from "@/components/DateRangePick
 import type { DateRange } from "@/components/DateRangePicker";
 import TodayBanner from "@/components/TodayBanner";
 import HourlyBreakdown from "@/components/HourlyBreakdown";
+import SalesTarget from "@/components/SalesTarget";
+import ChannelMix from "@/components/ChannelMix";
+import VoidTracker from "@/components/VoidTracker";
 import { SALES_DATA, PRIOR_WEEK_SALES } from "@/lib/data";
-import { TrendingUp, TrendingDown, Pizza, DollarSign, BarChart3, ShoppingBag, Star, Utensils } from "lucide-react";
+import { TrendingUp, TrendingDown, Pizza, DollarSign, BarChart3, BarChart2, ShoppingBag, Star, Utensils } from "lucide-react";
 
 const tabs = [
   { id: "sales", label: "Sales", icon: BarChart3 },
@@ -19,10 +22,11 @@ const tabs = [
   { id: "online", label: "Online Orders", icon: ShoppingBag },
   { id: "reviews", label: "Reviews", icon: Star },
   { id: "catering", label: "Catering", icon: Utensils },
+  { id: "analytics", label: "Analytics", icon: BarChart2 },
 ];
 
 // Tabs that use date range filtering
-const DATE_FILTERED_TABS = new Set(["sales", "production"]);
+const DATE_FILTERED_TABS = new Set(["sales", "production", "analytics"]);
 
 function formatCurrency(n: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
@@ -244,6 +248,13 @@ export default function Dashboard() {
         {activeTab === "online" && <OnlineOrders />}
         {activeTab === "reviews" && <ReviewsSection />}
         {activeTab === "catering" && <CateringPipeline />}
+        {activeTab === "analytics" && (
+          <div className="space-y-8">
+            <SalesTarget dateRange={dateRange} />
+            <ChannelMix dateRange={dateRange} />
+            <VoidTracker dateRange={dateRange} />
+          </div>
+        )}
       </main>
 
       {/* Footer */}
