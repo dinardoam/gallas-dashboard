@@ -8,8 +8,13 @@ import ReviewsSection from "@/components/ReviewsSection";
 import CateringPipeline from "@/components/CateringPipeline";
 import DateRangePicker, { getDefaultDateRange } from "@/components/DateRangePicker";
 import type { DateRange } from "@/components/DateRangePicker";
+import TodayBanner from "@/components/TodayBanner";
+import HourlyBreakdown from "@/components/HourlyBreakdown";
+import SalesTarget from "@/components/SalesTarget";
+import ChannelMix from "@/components/ChannelMix";
+import VoidTracker from "@/components/VoidTracker";
 import { SALES_DATA, PRIOR_WEEK_SALES } from "@/lib/data";
-import { TrendingUp, TrendingDown, Pizza, DollarSign, BarChart3, ShoppingBag, Star, Utensils } from "lucide-react";
+import { TrendingUp, TrendingDown, Pizza, DollarSign, BarChart3, BarChart2, ShoppingBag, Star, Utensils } from "lucide-react";
 
 const tabs = [
   { id: "sales", label: "Sales", icon: BarChart3 },
@@ -17,10 +22,11 @@ const tabs = [
   { id: "online", label: "Online Orders", icon: ShoppingBag },
   { id: "reviews", label: "Reviews", icon: Star },
   { id: "catering", label: "Catering", icon: Utensils },
+  { id: "analytics", label: "Analytics", icon: BarChart2 },
 ];
 
 // Tabs that use date range filtering
-const DATE_FILTERED_TABS = new Set(["sales", "production"]);
+const DATE_FILTERED_TABS = new Set(["sales", "production", "analytics"]);
 
 function formatCurrency(n: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
@@ -138,6 +144,9 @@ export default function Dashboard() {
         </div>
       </header>
 
+      {/* Today Live Banner */}
+      <TodayBanner />
+
       {/* KPI Strip */}
       <div className="border-b border-gallas-dark-border bg-gallas-dark-card/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
@@ -193,7 +202,7 @@ export default function Dashboard() {
       </div>
 
       {/* Tab Nav */}
-      <div className="border-b border-gallas-dark-border bg-gallas-dark-card/30 sticky top-16 z-40">
+      <div className="border-b border-gallas-dark-border bg-gallas-dark-card/30 sticky top-[104px] z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <nav className="flex gap-1 overflow-x-auto scrollbar-hide py-1" role="tablist">
             {tabs.map((tab) => {
@@ -229,11 +238,23 @@ export default function Dashboard() {
           </div>
         )}
 
-        {activeTab === "sales" && <SalesOverview dateRange={dateRange} />}
+        {activeTab === "sales" && (
+          <div className="space-y-6">
+            <SalesOverview dateRange={dateRange} />
+            <HourlyBreakdown dateRange={dateRange} />
+          </div>
+        )}
         {activeTab === "production" && <PizzaProduction dateRange={dateRange} />}
         {activeTab === "online" && <OnlineOrders />}
         {activeTab === "reviews" && <ReviewsSection />}
         {activeTab === "catering" && <CateringPipeline />}
+        {activeTab === "analytics" && (
+          <div className="space-y-8">
+            <SalesTarget dateRange={dateRange} />
+            <ChannelMix dateRange={dateRange} />
+            <VoidTracker dateRange={dateRange} />
+          </div>
+        )}
       </main>
 
       {/* Footer */}
