@@ -9,7 +9,7 @@ exports.handler = async (event) => {
   const start = startDate ? new Date(startDate).getTime() : Date.now() - 7 * 86400000;
   const end = endDate ? new Date(endDate).getTime() + 86400000 : Date.now();
 
-  const url = `https://api.clover.com/v3/merchants/${mid}/orders?filter=clientCreatedTime>=${start}&filter=clientCreatedTime<${end}&limit=1000&expand[]=orderType`;
+  const url = `https://api.clover.com/v3/merchants/${mid}/orders?filter=clientCreatedTime>=${start}&filter=clientCreatedTime<${end}&limit=1000&expand=orderType`;
 
   const data = await new Promise((resolve, reject) => {
     const req = https.get(url, { headers: { Authorization: `Bearer ${apiKey}` } }, (res) => {
@@ -24,13 +24,31 @@ exports.handler = async (event) => {
 
   const orders = data.elements || [];
 
-  // Group by orderType label
+  // Normalize Clover order type labels into clean channel names
+  function normalizeChannel(label) {
+    if (!label) return 'Other';
+    const l = label.toLowerCase();
+    if (l.includes('doordash') || l.includes('door dash')) return 'DoorDash';
+    if (l.includes('uber')) return 'Uber Eats';
+    if (l.includes('popmenu') && l.includes('delivery')) return 'Popmenu Delivery';
+    if (l.includes('popmenu') && l.includes('pickup')) return 'Popmenu Pickup';
+    if (l.includes('popmenu')) return 'Popmenu';
+    if (l.includes('online')) return 'Online Order';
+    if (l.includes('delivery')) return 'Delivery';
+    if (l.includes('to go') || l.includes('togo') || l.includes('take out') || l.includes('takeout') || l.includes('pickup') || l.includes('pick up')) return 'To Go';
+    if (l.includes('dine in') || l.includes('dine-in') || l.includes('dinein')) return 'Dine In';
+    if (l.includes('bar')) return 'Bar';
+    return label; // keep original label if no match
+  }
+
+  // Group by normalized channel
   const channelMap = {};
   orders.forEach(order => {
-    const label = (order.orderType && order.orderType.label) ? order.orderType.label : 'Other';
-    if (!channelMap[label]) channelMap[label] = { name: label, revenue: 0, orders: 0 };
-    channelMap[label].revenue += (order.total || 0) / 100;
-    channelMap[label].orders += 1;
+    const rawLabel = (order.orderType && order.orderType.label) ? order.orderType.label : null;
+    const channel = normalizeChannel(rawLabel);
+    if (!channelMap[channel]) channelMap[channel] = { name: channel, revenue: 0, orders: 0 };
+    channelMap[channel].revenue += (order.total || 0) / 100;
+    channelMap[channel].orders += 1;
   });
 
   const total = Object.values(channelMap).reduce((s, c) => s + c.revenue, 0);
