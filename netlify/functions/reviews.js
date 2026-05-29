@@ -11,9 +11,8 @@
 const https = require('https');
 
 // ---------------------------------------------------------------------------
-// Hardcoded fallback key (env var takes priority)
+// Configuration
 // ---------------------------------------------------------------------------
-const FALLBACK_API_KEY = 'AIzaSyADv56XrzM99kHdIMTyWdzjuLn7mBKp1Z4';
 const PLACE_ID = 'ChIJvWbSu_sI9YgRSrQVefMsNlE';
 
 // ---------------------------------------------------------------------------
@@ -157,7 +156,8 @@ function relativeDate(isoDate) {
 // Fetch reviews from Google Places Details API
 // ---------------------------------------------------------------------------
 async function fetchPlacesReviews(limit) {
-  const apiKey = process.env.GOOGLE_PLACES_API_KEY || FALLBACK_API_KEY;
+  const apiKey = process.env.GOOGLE_PLACES_API_KEY;
+  if (!apiKey) throw new Error('GOOGLE_PLACES_API_KEY env var is not set');
   const fields = 'name,rating,reviews,user_ratings_total';
   const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${PLACE_ID}&fields=${fields}&key=${apiKey}`;
 
