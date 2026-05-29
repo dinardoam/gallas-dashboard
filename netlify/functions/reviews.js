@@ -1,15 +1,20 @@
 // reviews.js — Netlify Function
-// Fetches live reviews from Google Business Profile API using OAuth refresh token.
-// Falls back to static data if credentials are missing or the API is unavailable.
+// Fetches live reviews from Google Places API.
+// Falls back to static data if the API is unavailable or returns no reviews.
 //
-// Required Netlify env vars for live mode:
-//   GOOGLE_CLIENT_ID         — OAuth2 client ID (maxbot project)
-//   GOOGLE_CLIENT_SECRET     — OAuth2 client secret
-//   GOOGLE_REFRESH_TOKEN     — Refresh token with business.manage scope
-//   GOOGLE_GBP_ACCOUNT_ID    — GBP account ID (e.g. "123456789012345678")
-//   GOOGLE_GBP_LOCATION_ID   — GBP location ID (e.g. "987654321098765432")
+// Required Netlify env var:
+//   GOOGLE_PLACES_API_KEY  — Google Maps/Places API key (project: maxbot-497412)
+//
+// Place ID: ChIJvWbSu_sI9YgRSrQVefMsNlE
+//   Galla's Pizza & Tavern, 4849 Peachtree Rd, Chamblee, GA 30341
 
 const https = require('https');
+
+// ---------------------------------------------------------------------------
+// Hardcoded fallback key (env var takes priority)
+// ---------------------------------------------------------------------------
+const FALLBACK_API_KEY = 'AIzaSyADv56XrzM99kHdIMTyWdzjuLn7mBKp1Z4';
+const PLACE_ID = 'ChIJvWbSu_sI9YgRSrQVefMsNlE';
 
 // ---------------------------------------------------------------------------
 // Static review data (real reviews from Galla's analysis, May 2026)
@@ -114,9 +119,9 @@ const STATIC_AVG = 4.6;
 // ---------------------------------------------------------------------------
 // Helper: fetch JSON via HTTPS
 // ---------------------------------------------------------------------------
-function httpsGet(url, headers) {
+function httpsGet(url) {
   return new Promise((resolve, reject) => {
-    const req = https.get(url, { headers }, (res) => {
+    const req = https.get(url, (res) => {
       let body = '';
       res.on('data', (d) => (body += d));
       res.on('end', () => {
@@ -137,98 +142,6 @@ function httpsGet(url, headers) {
   });
 }
 
-function httpsPost(hostname, path, body) {
-  return new Promise((resolve, reject) => {
-    const options = {
-      hostname,
-      path,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Content-Length': Buffer.byteLength(body),
-      },
-    };
-    const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', (d) => (data += d));
-      res.on('end', () => {
-        try {
-          resolve(JSON.parse(data));
-        } catch (e) {
-          reject(new Error(`JSON parse error: ${e.message}`));
-        }
-      });
-    });
-    req.on('error', reject);
-    req.setTimeout(8000, () => { req.destroy(); reject(new Error('Token request timeout')); });
-    req.write(body);
-    req.end();
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Get a fresh access token using the OAuth refresh token
-// ---------------------------------------------------------------------------
-async function getAccessToken() {
-  const clientId = process.env.GOOGLE_CLIENT_ID;
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-  const refreshToken = process.env.GOOGLE_REFRESH_TOKEN;
-
-  if (!clientId || !clientSecret || !refreshToken) {
-    throw new Error('Missing Google OAuth credentials (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN)');
-  }
-
-  const body = new URLSearchParams({
-    client_id: clientId,
-    client_secret: clientSecret,
-    refresh_token: refreshToken,
-    grant_type: 'refresh_token',
-  }).toString();
-
-  const data = await httpsPost('oauth2.googleapis.com', '/token', body);
-
-  if (!data.access_token) {
-    throw new Error(`Token refresh failed: ${JSON.stringify(data)}`);
-  }
-
-  return data.access_token;
-}
-
-// ---------------------------------------------------------------------------
-// Fetch Google Business Profile reviews
-// ---------------------------------------------------------------------------
-async function fetchGoogleReviews(limit) {
-  const accountId = process.env.GOOGLE_GBP_ACCOUNT_ID;
-  const locationId = process.env.GOOGLE_GBP_LOCATION_ID;
-
-  if (!accountId || !locationId) {
-    throw new Error('Missing GOOGLE_GBP_ACCOUNT_ID or GOOGLE_GBP_LOCATION_ID');
-  }
-
-  const accessToken = await getAccessToken();
-
-  // Use the v4 reviews endpoint (stable, widely supported)
-  const url = `https://mybusiness.googleapis.com/v4/accounts/${accountId}/locations/${locationId}/reviews?pageSize=${limit}`;
-
-  const data = await httpsGet(url, { Authorization: `Bearer ${accessToken}` });
-  return data;
-}
-
-function mapGbpReview(r, idx) {
-  const ts = r.updateTime || r.createTime || '';
-  const date = ts ? ts.slice(0, 10) : '';
-  const ratingMap = { ONE: 1, TWO: 2, THREE: 3, FOUR: 4, FIVE: 5 };
-  return {
-    id: r.reviewId || `gbp-${idx}`,
-    author: r.reviewer?.displayName || 'Anonymous',
-    rating: ratingMap[r.starRating] || 0,
-    text: r.comment || '',
-    date,
-    relativeTime: date ? relativeDate(date) : '',
-    source: 'google',
-  };
-}
-
 function relativeDate(isoDate) {
   const diff = Math.floor((Date.now() - new Date(isoDate).getTime()) / 86400000);
   if (diff === 0) return 'Today';
@@ -241,6 +154,41 @@ function relativeDate(isoDate) {
 }
 
 // ---------------------------------------------------------------------------
+// Fetch reviews from Google Places Details API
+// ---------------------------------------------------------------------------
+async function fetchPlacesReviews(limit) {
+  const apiKey = process.env.GOOGLE_PLACES_API_KEY || FALLBACK_API_KEY;
+  const fields = 'name,rating,reviews,user_ratings_total';
+  const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${PLACE_ID}&fields=${fields}&key=${apiKey}`;
+
+  const data = await httpsGet(url);
+
+  if (data.status !== 'OK') {
+    throw new Error(`Places API error: ${data.status} — ${data.error_message || 'unknown'}`);
+  }
+
+  const result = data.result || {};
+  const rawReviews = result.reviews || [];
+  const overallRating = result.rating || null;
+  const totalRatings = result.user_ratings_total || null;
+
+  const reviews = rawReviews.slice(0, limit).map((r, idx) => {
+    const date = r.time ? new Date(r.time * 1000).toISOString().slice(0, 10) : '';
+    return {
+      id: `places-${idx}`,
+      author: r.author_name || 'Anonymous',
+      rating: r.rating || 0,
+      text: r.text || '',
+      date,
+      relativeTime: r.relative_time_description || (date ? relativeDate(date) : ''),
+      source: 'google',
+    };
+  });
+
+  return { reviews, overallRating, totalRatings };
+}
+
+// ---------------------------------------------------------------------------
 // Handler
 // ---------------------------------------------------------------------------
 exports.handler = async (event) => {
@@ -250,32 +198,33 @@ exports.handler = async (event) => {
   };
 
   const params = event.queryStringParameters || {};
-  const limit = Math.min(parseInt(params.limit || '10', 10), 50);
+  const limit = Math.min(parseInt(params.limit || '5', 10), 5);
 
-  // Try Google Business Profile API first
+  // Try Google Places API first
   try {
-    const gbpData = await fetchGoogleReviews(limit);
-    const reviews = (gbpData.reviews || []).map(mapGbpReview);
+    const { reviews, overallRating, totalRatings } = await fetchPlacesReviews(limit);
 
     if (reviews.length > 0) {
-      const avgRating = reviews.reduce((s, r) => s + r.rating, 0) / reviews.length;
+      const avgRating = overallRating || (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length);
       const breakdown = { '5': 0, '4': 0, '3': 0, '2': 0, '1': 0 };
       reviews.forEach((r) => {
         const k = String(r.rating);
         if (breakdown[k] !== undefined) breakdown[k]++;
       });
 
-      const totalFromBreakdown = Object.values(breakdown).reduce((s, v) => s + v, 0);
-
       return {
         statusCode: 200,
         headers,
         body: JSON.stringify({
-          source: 'google',
-          avgRating: parseFloat(avgRating.toFixed(1)),
-          totalReviews: gbpData.totalReviewCount || totalFromBreakdown,
-          recentReviews: reviews,
+          source: 'google_places',
+          rating: parseFloat(avgRating.toFixed(1)),
+          totalReviews: totalRatings || reviews.length,
+          reviews,
           ratingBreakdown: breakdown,
+          avgRating: parseFloat(avgRating.toFixed(1)),
+          totalRatings: totalRatings || reviews.length,
+          // Legacy fields for dashboard compatibility
+          recentReviews: reviews,
           trend: {
             last30days: parseFloat(avgRating.toFixed(1)),
             last90days: parseFloat(avgRating.toFixed(1)),
@@ -284,20 +233,26 @@ exports.handler = async (event) => {
         }),
       };
     }
-  } catch (_err) {
+  } catch (err) {
+    console.error('Places API error:', err.message);
     // Fall through to static
   }
 
   // Static fallback
+  const staticReviews = STATIC_REVIEWS.slice(0, limit);
   return {
     statusCode: 200,
     headers,
     body: JSON.stringify({
       source: 'static',
-      avgRating: STATIC_AVG,
+      rating: STATIC_AVG,
       totalReviews: STATIC_TOTAL,
-      recentReviews: STATIC_REVIEWS.slice(0, limit),
+      reviews: staticReviews,
       ratingBreakdown: STATIC_RATING_BREAKDOWN,
+      avgRating: STATIC_AVG,
+      totalRatings: STATIC_TOTAL,
+      // Legacy fields
+      recentReviews: staticReviews,
       trend: {
         last30days: 4.7,
         last90days: 4.6,
