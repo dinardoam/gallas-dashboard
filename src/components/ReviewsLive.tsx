@@ -267,7 +267,7 @@ export default function ReviewsLive() {
     );
   }
 
-  const isLive = data.source === "google";
+  const isLive = data.source === "google" || data.source === "google_places";
   const breakdownTotal = Object.values(data.ratingBreakdown).reduce((s, v) => s + v, 0);
   const trendDiff = parseFloat((data.trend.last30days - data.trend.last90days).toFixed(1));
 
