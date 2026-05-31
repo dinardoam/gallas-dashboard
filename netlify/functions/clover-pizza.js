@@ -41,9 +41,13 @@ exports.handler = async (event) => {
     const items = (order.lineItems && order.lineItems.elements) || [];
     items.forEach(item => {
       const name = (item.name || '').toLowerCase();
-      if (name.includes('gf') || name.includes('gluten')) { dayMap[d].gf++; dayMap[d].total++; }
-      else if (name.includes('large') || name.includes('16')) { dayMap[d].large++; dayMap[d].total++; }
-      else if (name.includes('mini') || name.includes('10')) { dayMap[d].mini++; dayMap[d].total++; }
+      // GF pies: names starting with "GF " (e.g. "GF Cheese", "GF Chicken in the Grass")
+      if (name.startsWith('gf ') || name.includes('gluten')) { dayMap[d].gf++; dayMap[d].total++; }
+      // Large pies: names starting with "Lrg " (e.g. "Lrg Cheese", "Lrg Margherita")
+      // Medium pies: names starting with "Med " — counted as large for prep purposes
+      else if (name.startsWith('lrg ') || name.startsWith('med ')) { dayMap[d].large++; dayMap[d].total++; }
+      // Mini pies: names starting with "Mini " (e.g. "Mini Cheese", "Mini Margherita")
+      else if (name.startsWith('mini ')) { dayMap[d].mini++; dayMap[d].total++; }
     });
   });
 
